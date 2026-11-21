@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html ng-app="salesApp">
+<head>
+    <meta charset="UTF-8">
+    <title>Sales Order</title>
+    <link rel="stylesheet" href="css/app.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.1.5/angular.min.js"></script>
+    <script src="js/app.js"></script>
+</head>
+<body ng-controller="MainCtrl">
+
+<header class="topbar">
+    <div class="brand">Sales<span>Order</span></div>
+    <nav class="menu">
+        <a href="" ng-class="{active: view=='dashboard'}" ng-click="setView('dashboard')">Dashboard</a>
+        <a href="" ng-class="{active: view=='sales'}" ng-click="setView('sales')">Sales Order</a>
+    </nav>
+</header>
+
+<main class="content">
+    <div class="loading" ng-show="loading">Loading sales orders…</div>
+    <div class="error" ng-show="error">{{error}}</div>
+
+    <!-- ===================== DASHBOARD ===================== -->
+    <section ng-show="view=='dashboard' && !loading">
+        <h1>Dashboard</h1>
+
+        <div class="cards">
+            <div class="card">
+                <div class="card-label">Total orders</div>
+                <div class="card-value">{{summary.totalOrders | number:0}}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Total order value</div>
+                <div class="card-value">{{summary.totalOrderValue | number:2}}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Open + Pending</div>
+                <div class="card-value">{{countOf('open') + countOf('pending')}}</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Cancelled</div>
+                <div class="card-value">{{countOf('cancel')}}</div>
+            </div>
+        </div>
+
+        <div class="panels">
+            <div class="panel">
+                <h2>Orders by status</h2>
+                <div class="bar-row clickable" ng-repeat="i in summary.byStatus" ng-click="openSales({status: i.status})">
+                    <span class="bar-label"><span class="badge st-{{i.status}}">{{i.status}}</span></span>
+                    <span class="bar-track"><span class="bar-fill st-bg-{{i.status}}" ng-style="{width: pct(i.count, summary.maxCount) + '%'}"></span></span>
+                    <span class="bar-num">{{i.count}}</span>
+                </div>
+            </div>
+            <div class="panel">
+                <h2>Amount by branch (InventSiteId)</h2>
+                <div class="bar-row clickable" ng-repeat="i in summary.byBranch" ng-click="openSales({branch: i.branch})">
+                    <span class="bar-label">{{i.branch}}</span>
+                    <span class="bar-track"><span class="bar-fill" ng-style="{width: pct(i.totalAmount, summary.maxBranchAmount) + '%'}"></span></span>
+                    <span class="bar-num">{{i.totalAmount | number:0}}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Summary by status</h2>
+            <table class="grid">
+                <thead><tr><th>Status</th><th class="num">Orders</th><th class="num">Total Amount</th></tr></thead>
+                <tbody>
+                <tr ng-repeat="i in summary.byStatus" class="clickable" ng-click="openSales({status: i.status})">
+                    <td><span class="badge st-{{i.status}}">{{i.status}}</span></td>
+                    <td class="num">{{i.count}}</td>
+                    <td class="num">{{i.totalAmount | number:2}}</td>
+                </tr>
+                </tbody>
+                <tfoot>
+                <tr><th>Total</th><th class="num">{{summary.totalOrders}}</th><th class="num">{{summary.totalOrderValue | number:2}}</th></tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="panel">
+            <h2>Latest 10 orders</h2>
+            <table class="grid">
+                <thead><tr><th>Sales ID</th><th>Customer</th><th>Branch</th><th>Order Date</th><th>Status</th><th class="num">Amount</th></tr></thead>
+                <tbody>
+                <tr ng-repeat="o in orders | limitTo:10">
+                    <td>{{o.salesId}}</td><td>{{o.customer}}</td><td>{{o.branch}}</td><td>{{o.orderDate}}</td>
+                    <td><span class="badge st-{{o.status}}">{{o.status}}</span></td>
+                    <td class="num">{{o.amount | number:2}}</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ===================== SALES ORDER LIST ===================== -->
+    <section ng-show="view=='sales' && !loading">
+        <h1>Sales Order</h1>
+
+        <form class="search" ng-submit="resetPage()">
+            <label>Status
+                <select ng-model="search.status" ng-change="resetPage()"
+                        ng-options="s for s in statuses">
+                    <option value="">-- All --</option>
+                </select>
+            </label>
+            <label>Branch
+                <select ng-model="search.branch" ng-change="resetPage()"
+                        ng-options="b for b in branches">
+                    <option value="">-- All --</option>
+                </select>
+            </label>
+            <label class="grow">Search
+                <input type="text" ng-model="search.q" ng-change="resetPage()"
+                       placeholder="Sales ID, customer, account, PO, customer ref, sales taker…">
+            </label>
+            <label>Page size
+                <select ng-model="paging.size" ng-change="resetPage()"
+                        ng-options="n for n in pageSizes"></select>
+            </label>
+            <button type="button" class="btn" ng-click="clearSearch()">Clear</button>
+        </form>
+
+        <div class="summary">
+            Showing {{rangeFrom()}} – {{rangeTo()}}
+            of {{filtered.length}} orders
+            <span class="muted">(total amount {{filteredAmount | number:2}})</span>
+        </div>
+
+        <table class="grid">
+            <thead>
+            <tr>
+                <th ng-repeat="c in columns" ng-click="sortBy(c.key)" ng-class="{num: c.num}" class="sortable">
+                    {{c.label}}
+                    <span class="sort" ng-show="sort.key == c.key && !sort.reverse">▲</span><span class="sort" ng-show="sort.key == c.key && sort.reverse">▼</span>
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr ng-repeat="o in filtered | startFrom:(paging.page * paging.size) | limitTo:paging.size">
+                <td>{{o.salesId}}</td>
+                <td>{{o.customer}}<div class="sub">{{o.custAccount}}</div></td>
+                <td>{{o.branch}}</td>
+                <td>{{o.orderDate}}</td>
+                <td><span class="badge st-{{o.status}}" title="{{o.rawStatus}}">{{o.status}}</span></td>
+                <td class="num">{{o.amount | number:2}}</td>
+                <td class="num">{{o.balance | number:2}}</td>
+                <td>{{o.orderBy}}</td>
+            </tr>
+            <tr ng-show="filtered.length == 0">
+                <td colspan="8" class="empty">No sales orders match your search.</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div class="pager" ng-show="pageCount() > 1">
+            <button class="btn" ng-disabled="paging.page == 0" ng-click="goTo(0)">« First</button>
+            <button class="btn" ng-disabled="paging.page == 0" ng-click="goTo(paging.page - 1)">‹ Prev</button>
+            <button class="btn page" ng-repeat="p in pageList()" ng-class="{current: p == paging.page}"
+                    ng-click="goTo(p)">{{p + 1}}</button>
+            <button class="btn" ng-disabled="paging.page >= pageCount() - 1" ng-click="goTo(paging.page + 1)">Next ›</button>
+            <button class="btn" ng-disabled="paging.page >= pageCount() - 1" ng-click="goTo(pageCount() - 1)">Last »</button>
+            <span class="muted">Page {{paging.page + 1}} of {{pageCount()}}</span>
+        </div>
+    </section>
+</main>
+
+</body>
+</html>
